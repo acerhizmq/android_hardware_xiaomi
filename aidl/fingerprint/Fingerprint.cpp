@@ -15,6 +15,8 @@
 #include <android-base/properties.h>
 #include <android-base/strings.h>
 
+#include <vector>
+
 using ::android::base::SetProperty;
 
 namespace aidl::android::hardware::biometrics::fingerprint {
@@ -48,7 +50,16 @@ Fingerprint::Fingerprint(std::shared_ptr<FingerprintConfig> config) : mConfig(st
     if (mDevice) {
         ALOGI("fingerprint HAL already opened");
     } else {
+        // A failed probe can leave its TEE buffers behind (Goodix holds ~15 MB of the
+        // qseecom-ta heap), so let the device name its module and try that one first.
+        std::vector<std::string> modules;
+        auto preferred = ::android::base::GetProperty("persist.vendor.fingerprint.module", "");
+        if (!preferred.empty()) modules.push_back(preferred);
         for (auto& [module] : kModules) {
+            if (module != preferred) modules.push_back(module);
+        }
+
+        for (const auto& module : modules) {
             std::string class_name;
             std::string class_module_id;
 
